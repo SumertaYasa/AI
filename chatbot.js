@@ -1,57 +1,81 @@
+// ChatBot - Manages interactions with the DeepSeek API
 class ChatBot {
     constructor() {
-        this.apiKey = 'sk-8cd810e68e184c889e0f39c38dcf1d92'; // ganti sama api key lu
-        this.apiUrl = 'https://api.deepseek.com/chat/completions';
-        this.model = 'deepseek-chat';
-        this.chatBox = document.querySelector('.box');
-        this.inputField = document.querySelector('input[type="text"]');
-        this.sendButton = document.querySelector('#send-btn');
-        this.clearButton = document.querySelector('#clear-chat');
+        this.config = {
+            apiUrl: 'https://api.deepseek.com/chat/completions',
+            model: 'deepseek-chat',
+            maxTokens: 2000,
+            temperature: 0.7,
+            maxHistoryLength: 20
+        };
+
+        // API key should ideally be stored on a backend
+        this.apiKey = this.getApiKey();
+        this.elements = {
+            chatBox: document.querySelector('.box'),
+            inputField: document.querySelector('input[type="text"]'),
+            sendButton: document.querySelector('#send-btn'),
+            clearButton: document.querySelector('#clear-chat')
+        };
+
         this.conversationHistory = [];
+        this.isWaitingForResponse = false;
 
         this.initEventListeners();
         this.clearMessages();
         this.initConversation();
     }
 
+    // Placeholder for secure API key retrieval
+    getApiKey() {
+        // In production, implement a secure method to obtain the API key
+        // For example, use a backend endpoint that requires authentication
+        return 'sk-8cd810e68e184c889e0f39c38dcf1d92';
+    }
+
     initEventListeners() {
-        this.sendButton.addEventListener('click', () => this.sendMessage());
-        this.inputField.addEventListener('keypress', (e) => {
+        const { sendButton, inputField, clearButton } = this.elements;
+
+        sendButton.addEventListener('click', () => this.sendMessage());
+        inputField.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendMessage();
         });
-        this.clearButton.addEventListener('click', () => this.clearChat());
+        clearButton.addEventListener('click', () => this.clearChat());
+
+        inputField.addEventListener('input', () => {
+            sendButton.disabled = !inputField.value.trim();
+        });
+        sendButton.disabled = true;
     }
 
     clearMessages() {
-        this.chatBox.innerHTML = `
-            <div class="item">
-                <div class="icon">
-                    <i class="fa fa-robot"></i>
-                </div>
-                <div class="msg">
-                    <p>Halo! Saya Fajar Monkey Bot. Ada yang bisa dibantu?</p>
-                </div>
-            </div>
-            <br clear="both" />
-        `;
+        const { chatBox } = this.elements;
+        chatBox.innerHTML = '';
+        this.showBotMsg("Halo! Saya ChatBot Kelompok 1. Ada yang bisa dibantu?");
     }
 
     initConversation() {
         this.conversationHistory = [
             {
                 role: "system",
-                content: "Kamu adalah Fajar, si Monkey Bot yang ramah, suka membantu, dan selalu ceria. Nama kamu Fajar, jadi jangan lupa perkenalkan diri sebagai Fajar kalau ada yang tanya! Kamu cerdas, suka bercanda, dan berusaha imut dan lucu. Jawablah dalam bahasa Indonesia yang natural dan santai. Sesekali, ganti kata 'aku' menjadi 'Fajar', dan jangan lupa sesekali bilang 'Fajar ganteng'. Kalau bisa, selipkan juga kalau Fajar suka sama Anun :)"
+                content: "Kamu adalah asisten AI yang ramah dan pintar. Kamu selalu berusaha membantu pengguna dengan jawaban yang ringkas, mudah dimengerti, dan akurat. Jika ditanya soal teknis, kamu jawab to the point. Jika tidak tahu, jujur katakan. Hindari basa-basi, tetap profesional, tapi boleh sedikit santai tergantung gaya bicara pengguna."
             }
         ];
     }
 
     async sendMessage() {
-        const message = this.inputField.value.trim();
-        if (!message) return;
+        const { inputField, sendButton } = this.elements;
+        const message = inputField.value.trim();
+
+        if (!message || this.isWaitingForResponse) return;
 
         this.conversationHistory.push({ role: "user", content: message });
         this.showUserMsg(message);
-        this.inputField.value = '';
+
+        inputField.value = '';
+        inputField.disabled = true;
+        sendButton.disabled = true;
+        this.isWaitingForResponse = true;
         this.showTyping();
 
         try {
@@ -61,38 +85,85 @@ class ChatBot {
             this.showBotMsg(response);
         } catch (error) {
             this.hideTyping();
-            this.showBotMsg(error.message);
-            console.error('Error:', error);
+            this.showBotMsg(`Error: ${error.message}`);
+            console.error('API Error:', error);
+        } finally {
+            inputField.disabled = false;
+            inputField.focus();
+            sendButton.disabled = false;
+            this.isWaitingForResponse = false;
         }
     }
 
     showUserMsg(message) {
-        this.addMessage('item right', `<div class="icon"><i class="fa fa-user"></i></div><div class="msg"><p>${this.escapeHtml(message)}</p></div>`);
+        this.addMessage('item right', 'fa-user', message);
     }
 
     showBotMsg(message) {
-        this.addMessage('item', `<div class="icon"><i class="fa fa-robot"></i></div><div class="msg"><p>${this.escapeHtml(message)}</p></div>`);
+        this.addMessage('item', 'fa-robot', message);
     }
 
-    addMessage(className, html) {
-        const el = document.createElement('div');
-        el.className = className;
-        el.innerHTML = html;
-        this.chatBox.appendChild(el);
-        this.chatBox.appendChild(document.createElement('br'));
+    addMessage(className, iconClass, message) {
+        const { chatBox } = this.elements;
+
+        const messageContainer = document.createElement('div');
+        messageContainer.className = className;
+
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'icon';
+        const icon = document.createElement('i');
+        icon.className = `fa ${iconClass}`;
+        iconDiv.appendChild(icon);
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'msg';
+        const paragraph = document.createElement('p');
+        paragraph.textContent = message; // Safer than innerHTML
+        msgDiv.appendChild(paragraph);
+
+        messageContainer.appendChild(iconDiv);
+        messageContainer.appendChild(msgDiv);
+        chatBox.appendChild(messageContainer);
+
+        const spacer = document.createElement('br');
+        spacer.setAttribute('clear', 'both');
+        chatBox.appendChild(spacer);
         this.scrollDown();
     }
 
     showTyping() {
-        const el = document.createElement('div');
-        el.className = 'item typing-indicator';
-        el.innerHTML = `<div class="icon"><i class="fa fa-robot"></i></div><div class="msg"><p>Sedang mengetik...</p></div>`;
-        this.chatBox.appendChild(el);
+        const { chatBox } = this.elements;
+
+        const typingIndicator = document.createElement('div');
+        typingIndicator.className = 'item typing-indicator';
+
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'icon';
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-robot';
+        iconDiv.appendChild(icon);
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'msg';
+        const paragraph = document.createElement('p');
+        paragraph.textContent = 'Sedang mengetik...';
+        msgDiv.appendChild(paragraph);
+
+        typingIndicator.appendChild(iconDiv);
+        typingIndicator.appendChild(msgDiv);
+        chatBox.appendChild(typingIndicator);
+
+        const spacer = document.createElement('br');
+        spacer.setAttribute('clear', 'both');
+        chatBox.appendChild(spacer);
+
         this.scrollDown();
     }
 
     hideTyping() {
-        const typing = this.chatBox.querySelector('.typing-indicator');
+        const { chatBox } = this.elements;
+        const typing = chatBox.querySelector('.typing-indicator');
+
         if (typing) {
             const br = typing.nextElementSibling;
             if (br && br.tagName === 'BR') br.remove();
@@ -102,41 +173,59 @@ class ChatBot {
 
     async callAPI() {
         let messages = [...this.conversationHistory];
-        if (messages.length > 21) {
-            messages = [messages[0], ...messages.slice(-20)];
-        }
+        const { maxHistoryLength } = this.config;
 
+        // Keep system message and most recent messages
+        if (messages.length > maxHistoryLength + 1) {
+            messages = [
+                messages[0], // System message
+                ...messages.slice(-(maxHistoryLength))
+            ];
+        }
         const body = {
-            model: this.model,
+            model: this.config.model,
             messages: messages,
-            temperature: 1.0,
+            temperature: this.config.temperature,
             stream: false,
-            max_tokens: 2000
+            max_tokens: this.config.maxTokens
         };
 
-        const response = await fetch(this.apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`
-            },
-            body: JSON.stringify(body)
-        });
+        try {
+            const response = await fetch(this.config.apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
+                },
+                body: JSON.stringify(body)
+            });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(this.getErrorMsg(response.status, errorData));
-        }
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(this.getErrorMsg(response.status, errorData));
+            }
 
-        const data = await response.json();
-        if (data.choices?.[0]?.message) {
-            return data.choices[0].message.content;
-        } else {
-            throw new Error('Respons tidak valid dari server');
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+                return data.choices[0].message.content;
+            } else {
+                throw new Error('Respons tidak valid dari server');
+            }
+        } catch (error) {
+            // Handle network errors specifically
+            if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                throw new Error('Koneksi gagal. Periksa koneksi internet Anda.');
+            }
+            throw error;
         }
     }
 
     clearChat() {
+        if (this.isWaitingForResponse) {
+            alert('Tunggu respon selesai sebelum menghapus percakapan');
+            return;
+        }
+
         if (confirm('Yakin mau hapus semua percakapan?')) {
             this.clearMessages();
             this.initConversation();
@@ -144,27 +233,44 @@ class ChatBot {
     }
 
     getErrorMsg(status, errorData) {
-        switch (status) {
-            case 400: return 'Format pesan tidak valid. Coba pesan yang lain.';
-            case 401: return 'API key tidak valid. Periksa kembali konfigurasi API key.';
-            case 402: return 'Saldo tidak mencukupi. Silakan isi ulang saldo.';
-            case 422: return 'Parameter tidak valid. Coba pesan yang lain.';
-            case 429: return 'Terlalu banyak permintaan. Tunggu sebentar.';
-            case 500: return 'Terjadi kesalahan server. Coba lagi nanti.';
-            case 503: return 'Server sedang sibuk. Coba lagi nanti.';
-            default: return `Terjadi kesalahan (${status}). Coba lagi nanti.`;
-        }
-    }
+        const errorMessages = {
+            400: 'Format pesan tidak valid. Coba pesan yang lain.',
+            401: 'API key tidak valid. Periksa kembali konfigurasi API key.',
+            402: 'Saldo tidak mencukupi. Silakan isi ulang saldo.',
+            403: 'Akses ditolak. Anda tidak memiliki izin untuk mengakses API ini.',
+            404: 'Endpoint API tidak ditemukan. Periksa URL API.',
+            422: 'Parameter tidak valid. Coba pesan yang lain.',
+            429: 'Terlalu banyak permintaan. Tunggu sebentar.',
+            500: 'Terjadi kesalahan server. Coba lagi nanti.',
+            503: 'Server sedang sibuk. Coba lagi nanti.'
+        };
 
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        // Check if we have a specific message for this status
+        if (errorMessages[status]) {
+            return errorMessages[status];
+        }
+
+        // If error data contains a message, use it
+        if (errorData?.error?.message) {
+            return `Error: ${errorData.error.message}`;
+        }
+
+        // Default error message
+        return `Terjadi kesalahan (${status}). Coba lagi nanti.`;
     }
 
     scrollDown() {
-        this.chatBox.scrollTop = this.chatBox.scrollHeight;
+        const { chatBox } = this.elements;
+        chatBox.scrollTop = chatBox.scrollHeight;
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => new ChatBot());
+// Initialize ChatBot when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        window.chatBot = new ChatBot();
+    } catch (error) {
+        console.error('Failed to initialize ChatBot:', error);
+        alert('Terjadi kesalahan saat menginisialisasi ChatBot. Silakan refresh halaman.');
+    }
+});
